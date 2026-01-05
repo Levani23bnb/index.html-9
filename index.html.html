@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFT Marketplace | USDC Edition</title>
+    
+    <!-- დიზაინის ბიბლიოთეკა (Tailwind CSS) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- ბლოკჩეინის ბიბლიოთეკა (Ethers.js) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+
+    <!-- ფონტები -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(to right, #60a5fa, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            blue: '#2563eb', // Royal Blue
+                            silver: '#cbd5e1', // Silver
+                            dark: '#0f172a', // Dark Background
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-brand-dark text-white min-h-screen">
+
+    <!-- ნავიგაცია -->
+    <nav class="fixed w-full z-50 glass border-b border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-2xl font-bold gradient-text">NFT Market</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <button onclick="showSection('market')" class="hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium transition">Marketplace</button>
+                        <button onclick="showSection('create')" class="hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium transition">Create NFT</button>
+                    </div>
+                </div>
+                <div>
+                    <button id="connectBtn" onclick="connectWallet()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-full font-bold shadow-lg shadow-blue-500/30 transition-all">
+                        Connect Wallet
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- მთავარი კონტეინერი -->
+    <div class="pt-24 pb-12 px-4 max-w-7xl mx-auto">
+        
+        <!-- სტატუსის შეტყობინება -->
+        <div id="statusMessage" class="hidden fixed top-20 right-5 bg-slate-800 border border-blue-500 text-white px-6 py-4 rounded-lg shadow-2xl z-50">
+            <p id="msgText">Transaction Pending...</p>
+        </div>
+
+        <!-- სექცია: მარკეტი (ყიდვა) -->
+        <div id="marketSection" class="fade-in">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl md:text-5xl font-bold mb-4 text-brand-silver">Discover Exclusive <span class="text-blue-500">Digital Assets</span></h1>
+                <p class="text-slate-400">Buy and Sell NFTs using USDC</p>
+                <button onclick="fetchMarketItems()" class="mt-4 text-sm text-blue-400 hover:text-blue-300 underline">Refresh Items</button>
+            </div>
+
+            <!-- ნივთების გრიდი -->
+            <div id="itemsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- აქ ჩაიტვირთება ნივთები -->
+                <div class="col-span-full text-center text-slate-500 animate-pulse">
+                    Loading blockchain data... (Please connect wallet)
+                </div>
+            </div>
+        </div>
+
+        <!-- სექცია: შექმნა (Create) -->
+        <div id="createSection" class="hidden">
+            <div class="max-w-2xl mx-auto glass p-8 rounded-2xl shadow-2xl">
+                <h2 class="text-3xl font-bold mb-6 text-center text-brand-silver">Create New NFT</h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Asset Image URL</label>
+                        <input type="text" id="nftUrl" placeholder="e.g. https://ipfs.io/ipfs/..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        <p class="text-xs text-slate-500 mt-1">For this demo, paste a direct image link.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Price (in USDC)</label>
+                        <input type="number" id="nftPrice" placeholder="e.g. 10" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <button onclick="createNFT()" class="w-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white font-bold py-4 rounded-lg shadow-lg transform transition hover:scale-[1.02]">
+                        Mint & List NFT
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ჯავასკრიპტი -->
+    <script>
+        // --- კონფიგურაცია ---
+        // შენი მოწოდებული მისამართები
+        const marketplaceAddress = "0x8e6fD58c5FB124BB884BF2888a3D826Fdb302C1F";
+        const usdcAddress = "0x3600000000000000000000000000000000000000"; // ეს მისამართი საეჭვოა (ძალიან ბევრი ნოლია), მაგრამ კოდში ჩავსვი.
+
+        // ABI მარკეტფლეისისთვის
+        const marketplaceABI = [
+            "function createToken(string tokenURI, uint256 price) payable returns (uint256)",
+            "function createMarketSale(uint256 tokenId) payable",
+            "function fetchMarketItems() view returns (tuple(uint256 tokenId, address seller, address owner, uint256 price, bool sold)[])"
+        ];
+
+        // ABI USDC-სთვის (სტანდარტული ERC20)
+        const usdcABI = [
+            "function approve(address spender, uint256 amount) public returns (bool)",
+            "function allowance(address owner, address spender) public view returns (uint256)",
+            "function balanceOf(address account) public view returns (uint256)"
+        ];
+
+        let provider, signer, marketContract, usdcContract;
+
+        // --- ნავიგაცია ---
+        function showSection(id) {
+            document.getElementById('marketSection').classList.add('hidden');
+            document.getElementById('createSection').classList.add('hidden');
+            document.getElementById(id + 'Section').classList.remove('hidden');
+        }
+
+        // --- საფულის დაკავშირება ---
+        async function connectWallet() {
+            if (!window.ethereum) return alert("Please install MetaMask!");
+            try {
+                await window.ethereum.request({ method: 'eth_requestAccounts' });
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                
+                marketContract = new ethers.Contract(marketplaceAddress, marketplaceABI, signer);
+                usdcContract = new ethers.Contract(usdcAddress, usdcABI, signer);
+
+                const address = await signer.getAddress();
+                document.getElementById('connectBtn').innerText = address.substring(0,6) + "..." + address.substring(38);
+                document.getElementById('connectBtn').classList.add("bg-green-600");
+                
+                // ავტომატურად ჩავტვირთოთ ნივთები
+                fetchMarketItems();
+            } catch (err) {
+                console.error(err);
+                alert("Connection failed");
+            }
+        }
+
+        // --- ნივთების წამოღება (Fetch) ---
+        async function fetchMarketItems() {
+            if (!marketContract) return;
+            const container = document.getElementById('itemsContainer');
+            
+            try {
+                const data = await marketContract.fetchMarketItems();
+                container.innerHTML = ""; // გასუფთავება
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="col-span-full text-center text-slate-400">No items in marketplace yet.</div>';
+                    return;
+                }
+
+                for (let i = 0; i < data.length; i++) {
+                    const item = data[i];
+                    // ფასი გადაგვყავს იუზერისთვის გასაგებ ენაზე
+                    // შენიშვნა: USDC-ს აქვს 6 ციფრი თუ 18? სტანდარტულად 6, მაგრამ ტესტნეტზე გააჩნია.
+                    // აქ ვიყენებ 18-ს (ether standard). თუ USDC 6-იანია, გამოიყენე ethers.utils.formatUnits(item.price, 6)
+                    const price = ethers.utils.formatEther(item.price); 
+
+                    // ვიზუალი
+                    let html = `
+                    <div class="glass rounded-xl overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-slate-700">
+                        <div class="h-48 bg-slate-800 flex items-center justify-center overflow-hidden">
+                            <!-- აქ ვიყენებთ პლეისჰოლდერს, რეალურში TokenURI-დან უნდა წამოიღო სურათი -->
+                            <img src="https://via.placeholder.com/400x300/2563eb/ffffff?text=NFT+%23${item.tokenId}" alt="NFT" class="w-full h-full object-cover">
+                        </div>
+                        <div class="p-5">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-xl font-bold text-white">Token #${item.tokenId}</h3>
+                                <span class="bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded border border-blue-500">ID: ${item.tokenId}</span>
+                            </div>
+                            <div class="flex justify-between items-end">
+                                <div>
+                                    <p class="text-slate-400 text-xs uppercase tracking-wide">Price</p>
+                                    <p class="text-2xl font-bold text-blue-400">${price} USDC</p>
+                                </div>
+                                <button onclick="buyNFT(${item.tokenId}, '${item.price}')" class="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-6 py-2 rounded-lg font-semibold shadow-lg">
+                                    Buy Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>`;
+                    container.innerHTML += html;
+                }
+            } catch (err) {
+                console.error("Error fetching items:", err);
+                container.innerHTML = '<div class="col-span-full text-center text-red-400">Error loading items. Check console.</div>';
+            }
+        }
+
+        // --- NFT-ის შექმნა (Mint) ---
+        async function createNFT() {
+            if (!marketContract) return alert("Connect Wallet first!");
+            const url = document.getElementById('nftUrl').value;
+            const priceInput = document.getElementById('nftPrice').value;
+
+            if (!url || !priceInput) return alert("Please fill all fields");
+
+            showStatus("Creating NFT... Please confirm transaction.");
+
+            try {
+                // ფასის კონვერტაცია (18 decimals assumed)
+                const price = ethers.utils.parseUnits(priceInput, 'ether'); 
+                
+                // აქ ვიყენებთ ლისტინგის ფასს (თუ კონტრაქტი ითხოვს, მაგალითად 0.025 ETH)
+                // თუ შენს კონტრაქტს ლისტინგის ფასი არ აქვს, წაშალე {value: ...}
+                const listingPrice = ethers.utils.parseEther("0.025"); 
+
+                const tx = await marketContract.createToken(url, price, { value: listingPrice });
+                await tx.wait();
+                
+                showStatus("Success! NFT Created.", true);
+                document.getElementById('nftUrl').value = "";
+                document.getElementById('nftPrice').value = "";
+            } catch (err) {
+                console.error(err);
+                showStatus("Error creating NFT", true);
+            }
+        }
+
+        // --- NFT-ის ყიდვა (USDC Logic) ---
+        async function buyNFT(tokenId, priceRaw) {
+            if (!marketContract) return alert("Connect Wallet first!");
+            
+            try {
+                showStatus("Step 1/2: Approving USDC spending...");
+                
+                // 1. USDC-ის უფლების მიცემა (Approve)
+                const approveTx = await usdcContract.approve(marketplaceAddress, priceRaw);
+                await approveTx.wait();
+
+                showStatus("Step 2/2: Purchasing NFT...");
+
+                // 2. ყიდვის ფუნქციის გამოძახება
+                const buyTx = await marketContract.createMarketSale(tokenId);
+                await buyTx.wait();
+
+                showStatus("Success! NFT Purchased.", true);
+                fetchMarketItems(); // განახლება
+            } catch (err) {
+                console.error(err);
+                showStatus("Transaction Failed (Ensure you have USDC + Matic for gas)", true);
+            }
+        }
+
+        function showStatus(msg, autoHide = false) {
+            const el = document.getElementById('statusMessage');
+            const txt = document.getElementById('msgText');
+            el.classList.remove('hidden');
+            txt.innerText = msg;
+            if (autoHide) setTimeout(() => el.classList.add('hidden'), 5000);
+        }
+    </script>
+</body>
+</html>
